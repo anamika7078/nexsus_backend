@@ -1,6 +1,25 @@
 const User = require('../models/User');
 const SystemSetting = require('../models/SystemSetting');
 const jwt = require('jsonwebtoken');
+const { signAccessToken, signRefreshToken, hashToken } = require('../utils/jwt');
+
+const persistRefreshToken = async (userId, refreshToken) => {
+    const decoded = jwt.decode(refreshToken);
+    const expiresAt = decoded?.exp ? new Date(decoded.exp * 1000) : undefined;
+    const tokenHash = hashToken(refreshToken);
+
+    await User.updateOne(
+        { _id: userId },
+        {
+            $push: {
+                refreshTokens: {
+                    $each: [{ tokenHash, createdAt: new Date(), expiresAt }],
+                    $slice: -5
+                }
+            }
+        }
+    );
+};
 
 const login = async (req, res) => {
     const { email, password } = req.body;
@@ -16,11 +35,18 @@ const login = async (req, res) => {
             return res.status(401).json({ success: false, message: 'Invalid credentials' });
         }
 
-        const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET || 'your_jwt_secret', {
-            expiresIn: '1d'
-        });
+        const token = signAccessToken(user);
+        const refreshToken = signRefreshToken(user);
+        await persistRefreshToken(user._id, refreshToken);
 
-        res.json({ success: true, token, user: { email: user.email, role: user.role } });
+        await User.updateOne({ _id: user._id }, { $set: { lastLogin: new Date() } });
+
+        res.json({
+            success: true,
+            token,
+            refreshToken,
+            user: { email: user.email, role: user.role }
+        });
     } catch (error) {
         console.error('Login error:', error);
         res.status(500).json({ success: false, message: 'Server error' });
@@ -59,7 +85,17 @@ const register = async (req, res) => {
         });
 
         await newUser.save();
-        res.json({ success: true, message: 'Admin account created successfully' });
+
+        const token = signAccessToken(newUser);
+        const refreshToken = signRefreshToken(newUser);
+        await persistRefreshToken(newUser._id, refreshToken);
+
+        res.json({
+            success: true,
+            message: 'Admin account created successfully',
+            token,
+            refreshToken
+        });
     } catch (error) {
         console.error('Registration error:', error);
         res.status(500).json({ success: false, message: error.message });
@@ -78,4 +114,93 @@ const forgotPassword = async (req, res) => {
     }
 };
 
-module.exports = { login, register, forgotPassword };
+const refreshToken = async (req, res) => {
+    const { refreshToken: incomingToken } = req.body;
+
+    if (!incomingToken) {
+        return res.status(400).json({ success: false, message: 'Refresh token required' });
+    }
+
+    try {
+        if (!process.env.JWT_REFRESH_SECRET) {
+            return res.status(500).json({ success: false, message: 'JWT_REFRESH_SECRET not configured' });
+        }
+        const decoded = jwt.verify(incomingToken, process.env.JWT_REFRESH_SECRET);
+        const tokenHash = hashToken(incomingToken);
+
+        const user = await User.findOne({
+            _id: decoded.id,
+            'refreshTokens.tokenHash': tokenHash
+        });
+
+        if (!user) {
+            return res.status(401).json({ success: false, message: 'Invalid refresh token' });
+        }
+
+        const newAccessToken = signAccessToken(user);
+        const newRefreshToken = signRefreshToken(user);
+        const decodedRefresh = jwt.decode(newRefreshToken);
+
+        await User.updateOne(
+            { _id: user._id },
+            {
+                $pull: { refreshTokens: { tokenHash } },
+                $push: {
+                    refreshTokens: {
+                        $each: [
+                            {
+                                tokenHash: hashToken(newRefreshToken),
+                                createdAt: new Date(),
+                                expiresAt: decodedRefresh?.exp
+                                    ? new Date(decodedRefresh.exp * 1000)
+                                    : undefined
+                            }
+                        ],
+                        $slice: -5
+                    }
+                }
+            }
+        );
+
+        return res.json({
+            success: true,
+            token: newAccessToken,
+            refreshToken: newRefreshToken
+        });
+    } catch (error) {
+        return res.status(401).json({ success: false, message: 'Refresh token is not valid' });
+    }
+};
+
+const logout = async (req, res) => {
+    const { refreshToken: incomingToken } = req.body;
+
+    if (!incomingToken) {
+        return res.status(400).json({ success: false, message: 'Refresh token required' });
+    }
+
+    try {
+        if (!process.env.JWT_REFRESH_SECRET) {
+            return res.status(500).json({ success: false, message: 'JWT_REFRESH_SECRET not configured' });
+        }
+        const decoded = jwt.verify(incomingToken, process.env.JWT_REFRESH_SECRET);
+        const tokenHash = hashToken(incomingToken);
+
+        await User.updateOne(
+            { _id: decoded.id },
+            { $pull: { refreshTokens: { tokenHash } } }
+        );
+
+        return res.json({ success: true, message: 'Logged out successfully' });
+    } catch (error) {
+        return res.status(401).json({ success: false, message: 'Refresh token is not valid' });
+    }
+};
+
+module.exports = {
+    login,
+    register,
+    forgotPassword,
+    refreshToken,
+    logout
+};

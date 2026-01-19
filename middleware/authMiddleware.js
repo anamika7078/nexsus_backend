@@ -8,7 +8,10 @@ const protect = (req, res, next) => {
     }
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret');
+        if (!process.env.JWT_SECRET) {
+            return res.status(500).json({ success: false, message: 'JWT_SECRET not configured' });
+        }
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
         req.user = decoded;
         next();
     } catch (error) {

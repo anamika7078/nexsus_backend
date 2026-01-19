@@ -13,6 +13,13 @@ const userSchema = new mongoose.Schema({
         weeklySummary: { type: Boolean, default: true },
         systemUpdates: { type: Boolean, default: true }
     },
+    refreshTokens: [
+        {
+            tokenHash: { type: String, required: true },
+            createdAt: { type: Date, default: Date.now },
+            expiresAt: { type: Date }
+        }
+    ],
     lastLogin: { type: Date, default: Date.now },
     createdAt: { type: Date, default: Date.now }
 });

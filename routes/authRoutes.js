@@ -1,12 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const { login, register, forgotPassword } = require('../controllers/authController');
+const { login, register, forgotPassword, refreshToken, logout } = require('../controllers/authController');
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 
 router.post('/login', login);
 router.post('/register', register);
 router.post('/forgot-password', forgotPassword);
+router.post('/refresh', refreshToken);
+router.post('/logout', logout);
 
 // Temporary setup route to create first admin
 router.get('/setup', async (req, res) => {
