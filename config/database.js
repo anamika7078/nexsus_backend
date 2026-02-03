@@ -2,8 +2,13 @@ const { Sequelize } = require('sequelize');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
-const sequelize = process.env.DATABASE_URL
-  ? new Sequelize(process.env.DATABASE_URL, {
+const dbUrl = process.env.DATABASE_URL;
+
+let sequelize;
+
+if (dbUrl && dbUrl.startsWith('postgres')) {
+  console.log('Using DATABASE_URL for connection');
+  sequelize = new Sequelize(dbUrl, {
     dialect: 'postgres',
     protocol: 'postgres',
     dialectOptions: {
@@ -13,8 +18,10 @@ const sequelize = process.env.DATABASE_URL
       }
     },
     logging: false
-  })
-  : new Sequelize(
+  });
+} else {
+  console.log('Using individual DB variables for connection');
+  sequelize = new Sequelize(
     process.env.DB_NAME || 'nexsus_cyber',
     process.env.DB_USER || 'postgres',
     process.env.DB_PASSWORD || 'postgres',
@@ -37,5 +44,6 @@ const sequelize = process.env.DATABASE_URL
       }
     }
   );
+}
 
 module.exports = sequelize;
