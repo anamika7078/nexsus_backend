@@ -1,8 +1,9 @@
 const FAQ = require('../models/FAQ');
+const { Op } = require('sequelize');
 
 const getAllFAQs = async (req, res) => {
     try {
-        const faqs = await FAQ.find().sort({ createdAt: -1 });
+        const faqs = await FAQ.findAll({ order: [['createdAt', 'DESC']] });
         res.json({ success: true, faqs });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -12,8 +13,7 @@ const getAllFAQs = async (req, res) => {
 const createFAQ = async (req, res) => {
     try {
         const { question, answer, category } = req.body;
-        const newFAQ = new FAQ({ question, answer, category });
-        await newFAQ.save();
+        const newFAQ = await FAQ.create({ question, answer, category });
         res.json({ success: true, faq: newFAQ });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -22,7 +22,11 @@ const createFAQ = async (req, res) => {
 
 const deleteFAQ = async (req, res) => {
     try {
-        await FAQ.findByIdAndDelete(req.params.id);
+        const faq = await FAQ.findByPk(req.params.id);
+        if (!faq) {
+            return res.status(404).json({ success: false, message: 'FAQ not found' });
+        }
+        await faq.destroy();
         res.json({ success: true, message: 'FAQ deleted' });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -35,7 +39,9 @@ const queryBot = async (req, res) => {
     try {
         // Simple search (case insensitive)
         const faq = await FAQ.findOne({
-            question: { $regex: message, $options: 'i' }
+            where: {
+                question: { [Op.like]: `%${message}%` }
+            }
         });
 
         if (faq) {

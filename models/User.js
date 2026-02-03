@@ -1,43 +1,78 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
 const bcrypt = require('bcryptjs');
+const sequelize = require('../config/database');
 
-const userSchema = new mongoose.Schema({
-    email: { type: String, required: true, unique: true },
-    password: { type: String, required: true },
-    role: { type: String, default: 'admin' },
-    name: { type: String, default: '' },
-    phone: { type: String, default: '' },
-    companyName: { type: String, default: 'Nexsus Cyber Solutions' },
-    emailNotifications: {
-        newLeads: { type: Boolean, default: true },
-        weeklySummary: { type: Boolean, default: true },
-        systemUpdates: { type: Boolean, default: true }
+const User = sequelize.define('User', {
+    id: {
+        type: DataTypes.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
     },
-    refreshTokens: [
-        {
-            tokenHash: { type: String, required: true },
-            createdAt: { type: Date, default: Date.now },
-            expiresAt: { type: Date }
+    email: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        unique: true,
+        validate: {
+            isEmail: true
         }
-    ],
-    lastLogin: { type: Date, default: Date.now },
-    createdAt: { type: Date, default: Date.now }
-});
-
-// Hash password before saving
-userSchema.pre('save', async function () {
-    if (!this.isModified('password')) return;
-    try {
-        const salt = await bcrypt.genSalt(10);
-        this.password = await bcrypt.hash(this.password, salt);
-    } catch (error) {
-        throw error;
+    },
+    password: {
+        type: DataTypes.STRING,
+        allowNull: false
+    },
+    role: {
+        type: DataTypes.STRING,
+        defaultValue: 'admin'
+    },
+    name: {
+        type: DataTypes.STRING,
+        defaultValue: ''
+    },
+    phone: {
+        type: DataTypes.STRING,
+        defaultValue: ''
+    },
+    companyName: {
+        type: DataTypes.STRING,
+        defaultValue: 'Nexsus Cyber Solutions'
+    },
+    emailNotifications: {
+        type: DataTypes.JSON,
+        defaultValue: {
+            newLeads: true,
+            weeklySummary: true,
+            systemUpdates: true
+        }
+    },
+    refreshTokens: {
+        type: DataTypes.JSON,
+        defaultValue: []
+    },
+    lastLogin: {
+        type: DataTypes.DATE,
+        defaultValue: DataTypes.NOW
+    }
+}, {
+    timestamps: true,
+    hooks: {
+        beforeCreate: async (user) => {
+            if (user.password) {
+                const salt = await bcrypt.genSalt(10);
+                user.password = await bcrypt.hash(user.password, salt);
+            }
+        },
+        beforeUpdate: async (user) => {
+            if (user.changed('password')) {
+                const salt = await bcrypt.genSalt(10);
+                user.password = await bcrypt.hash(user.password, salt);
+            }
+        }
     }
 });
 
-// Compare password method
-userSchema.methods.comparePassword = async function (candidatePassword) {
+// Instance method to compare password
+User.prototype.comparePassword = async function (candidatePassword) {
     return await bcrypt.compare(candidatePassword, this.password);
 };
 
-module.exports = mongoose.model('User', userSchema);
+module.exports = User;

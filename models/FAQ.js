@@ -1,10 +1,26 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/database');
 
-const faqSchema = new mongoose.Schema({
-    question: { type: String, required: true },
-    answer: { type: String, required: true },
-    category: { type: String, default: 'General' },
-    createdAt: { type: Date, default: Date.now }
+const FAQ = sequelize.define('FAQ', {
+    id: {
+        type: DataTypes.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
+    },
+    question: {
+        type: DataTypes.TEXT,
+        allowNull: false
+    },
+    answer: {
+        type: DataTypes.TEXT,
+        allowNull: false
+    },
+    category: {
+        type: DataTypes.STRING,
+        defaultValue: 'General'
+    }
+}, {
+    timestamps: true
 });
 
-module.exports = mongoose.model('FAQ', faqSchema);
+module.exports = FAQ;

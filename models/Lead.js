@@ -1,13 +1,41 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/database');
 
-const leadSchema = new mongoose.Schema({
-    name: { type: String, required: true },
-    email: { type: String, required: true },
-    message: { type: String },
-    phone: { type: String },
-    type: { type: String, default: 'Contact Form' },
-    status: { type: String, default: 'New' },
-    createdAt: { type: Date, default: Date.now }
+const Lead = sequelize.define('Lead', {
+    id: {
+        type: DataTypes.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
+    },
+    name: {
+        type: DataTypes.STRING,
+        allowNull: false
+    },
+    email: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        validate: {
+            isEmail: true
+        }
+    },
+    message: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
+    phone: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    type: {
+        type: DataTypes.STRING,
+        defaultValue: 'Contact Form'
+    },
+    status: {
+        type: DataTypes.STRING,
+        defaultValue: 'New'
+    }
+}, {
+    timestamps: true
 });
 
-module.exports = mongoose.model('Lead', leadSchema);
+module.exports = Lead;

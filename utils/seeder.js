@@ -6,14 +6,14 @@ const seedSuperAdmin = async () => {
         const password = 'Admin@123';
         const role = 'superadmin';
 
-        const existingUser = await User.findOne({ email });
+        const existingUser = await User.findOne({ where: { email } });
 
         if (existingUser) {
             console.log('ℹ️  Super Admin already exists.');
             return;
         }
 
-        const superAdmin = new User({
+        const superAdmin = await User.create({
             name: 'Super Admin',
             email,
             password,
@@ -22,7 +22,6 @@ const seedSuperAdmin = async () => {
             phone: '0000000000'
         });
 
-        await superAdmin.save();
         console.log('✅ Super Admin created successfully.');
     } catch (error) {
         console.error('❌ Error seeding Super Admin:', error);

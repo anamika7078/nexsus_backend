@@ -1,7 +1,7 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const mongoose = require('mongoose');
-require('dotenv').config();
+const sequelize = require('./config/database');
 
 const contactRoutes = require('./routes/contactRoutes');
 const authRoutes = require('./routes/authRoutes');
@@ -31,13 +31,13 @@ app.use('/api/user', userRoutes);
 app.use('/api/quotes', quoteRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
-// Database Connection
-mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/Nexsus-cyber')
+// Database Connection and Sync
+sequelize.sync({ force: false })
     .then(() => {
-        console.log('✅ MongoDB Connected');
+        console.log('✅ MySQL Database Connected & Synced');
         seedSuperAdmin();
     })
-    .catch(err => console.error('❌ MongoDB Connection Error:', err));
+    .catch(err => console.error('❌ MySQL Connection Error:', err));
 
 // Health Check
 app.get('/', (req, res) => {

@@ -8,24 +8,23 @@ const persistRefreshToken = async (userId, refreshToken) => {
     const expiresAt = decoded?.exp ? new Date(decoded.exp * 1000) : undefined;
     const tokenHash = hashToken(refreshToken);
 
-    await User.updateOne(
-        { _id: userId },
-        {
-            $push: {
-                refreshTokens: {
-                    $each: [{ tokenHash, createdAt: new Date(), expiresAt }],
-                    $slice: -5
-                }
-            }
-        }
-    );
+    const user = await User.findByPk(userId);
+    if (user) {
+        const currentTokens = user.refreshTokens || [];
+        currentTokens.push({ tokenHash, createdAt: new Date(), expiresAt });
+
+        // Keep only last 5 tokens
+        const updatedTokens = currentTokens.slice(-5);
+
+        await user.update({ refreshTokens: updatedTokens });
+    }
 };
 
 const login = async (req, res) => {
     const { email, password } = req.body;
 
     try {
-        const user = await User.findOne({ email });
+        const user = await User.findOne({ where: { email } });
         if (!user) {
             return res.status(401).json({ success: false, message: 'Invalid credentials' });
         }
@@ -37,9 +36,9 @@ const login = async (req, res) => {
 
         const token = signAccessToken(user);
         const refreshToken = signRefreshToken(user);
-        await persistRefreshToken(user._id, refreshToken);
+        await persistRefreshToken(user.id, refreshToken);
 
-        await User.updateOne({ _id: user._id }, { $set: { lastLogin: new Date() } });
+        await user.update({ lastLogin: new Date() });
 
         res.json({
             success: true,
@@ -58,37 +57,34 @@ const register = async (req, res) => {
     const { name, email, password, secretKey } = req.body;
     try {
         // Find or initialize registration secret
-        let secretSetting = await SystemSetting.findOne({ key: 'registration_secret' });
+        let secretSetting = await SystemSetting.findOne({ where: { key: 'registration_secret' } });
         if (!secretSetting) {
-            secretSetting = new SystemSetting({
+            secretSetting = await SystemSetting.create({
                 key: 'registration_secret',
                 value: '12345',
                 description: 'Master key for new admin registrations'
             });
-            await secretSetting.save();
         }
 
         // Verify secret key
         if (secretKey !== secretSetting.value) {
             return res.status(401).json({ success: false, message: 'Invalid registration access key' });
         }
-        const userExists = await User.findOne({ email });
+        const userExists = await User.findOne({ where: { email } });
         if (userExists) {
             return res.status(400).json({ success: false, message: 'User already exists' });
         }
 
-        const newUser = new User({
+        const newUser = await User.create({
             name,
             email,
             password,
             role: 'admin' // Default to admin for this specific project
         });
 
-        await newUser.save();
-
         const token = signAccessToken(newUser);
         const refreshToken = signRefreshToken(newUser);
-        await persistRefreshToken(newUser._id, refreshToken);
+        await persistRefreshToken(newUser.id, refreshToken);
 
         res.json({
             success: true,
@@ -106,7 +102,7 @@ const register = async (req, res) => {
 const forgotPassword = async (req, res) => {
     const { email } = req.body;
     try {
-        const user = await User.findOne({ email });
+        const user = await User.findOne({ where: { email } });
         // Whether user exists or not, we return success for security (prevents account enumeration)
         res.json({ success: true, message: 'If an account exists with that email, reset instructions have been sent.' });
     } catch (error) {
@@ -129,11 +125,17 @@ const refreshToken = async (req, res) => {
         const tokenHash = hashToken(incomingToken);
 
         const user = await User.findOne({
-            _id: decoded.id,
-            'refreshTokens.tokenHash': tokenHash
+            where: {
+                id: decoded.id
+            }
         });
 
-        if (!user) {
+        if (!user || !user.refreshTokens) {
+            return res.status(401).json({ success: false, message: 'Invalid refresh token' });
+        }
+
+        const tokenExists = user.refreshTokens.some(token => token.tokenHash === tokenHash);
+        if (!tokenExists) {
             return res.status(401).json({ success: false, message: 'Invalid refresh token' });
         }
 
@@ -141,26 +143,20 @@ const refreshToken = async (req, res) => {
         const newRefreshToken = signRefreshToken(user);
         const decodedRefresh = jwt.decode(newRefreshToken);
 
-        await User.updateOne(
-            { _id: user._id },
-            {
-                $pull: { refreshTokens: { tokenHash } },
-                $push: {
-                    refreshTokens: {
-                        $each: [
-                            {
-                                tokenHash: hashToken(newRefreshToken),
-                                createdAt: new Date(),
-                                expiresAt: decodedRefresh?.exp
-                                    ? new Date(decodedRefresh.exp * 1000)
-                                    : undefined
-                            }
-                        ],
-                        $slice: -5
-                    }
-                }
-            }
-        );
+        const currentTokens = user.refreshTokens || [];
+        const updatedTokens = currentTokens.filter(token => token.tokenHash !== tokenHash);
+        updatedTokens.push({
+            tokenHash: hashToken(newRefreshToken),
+            createdAt: new Date(),
+            expiresAt: decodedRefresh?.exp
+                ? new Date(decodedRefresh.exp * 1000)
+                : undefined
+        });
+
+        // Keep only last 5 tokens
+        const finalTokens = updatedTokens.slice(-5);
+
+        await user.update({ refreshTokens: finalTokens });
 
         return res.json({
             success: true,
@@ -186,10 +182,11 @@ const logout = async (req, res) => {
         const decoded = jwt.verify(incomingToken, process.env.JWT_REFRESH_SECRET);
         const tokenHash = hashToken(incomingToken);
 
-        await User.updateOne(
-            { _id: decoded.id },
-            { $pull: { refreshTokens: { tokenHash } } }
-        );
+        const user = await User.findByPk(decoded.id);
+        if (user && user.refreshTokens) {
+            const updatedTokens = user.refreshTokens.filter(token => token.tokenHash !== tokenHash);
+            await user.update({ refreshTokens: updatedTokens });
+        }
 
         return res.json({ success: true, message: 'Logged out successfully' });
     } catch (error) {

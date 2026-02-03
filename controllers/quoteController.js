@@ -1,4 +1,5 @@
 const Quote = require('../models/Quote');
+const { Op } = require('sequelize');
 
 // Create new quote request (Public - no auth required)
 exports.createQuote = async (req, res) => {
@@ -13,7 +14,7 @@ exports.createQuote = async (req, res) => {
             });
         }
 
-        const quote = new Quote({
+        const quote = await Quote.create({
             name,
             email,
             phone,
@@ -23,8 +24,6 @@ exports.createQuote = async (req, res) => {
             timeline,
             message
         });
-
-        await quote.save();
 
         res.status(201).json({
             success: true,
@@ -45,28 +44,30 @@ exports.getAllQuotes = async (req, res) => {
         const skip = (page - 1) * limit;
 
         // Support filtering by status and search
-        const filter = {};
+        const whereClause = {};
         if (req.query.status) {
-            filter.status = req.query.status;
+            whereClause.status = req.query.status;
         }
         if (req.query.search) {
-            filter.$or = [
-                { name: { $regex: req.query.search, $options: 'i' } },
-                { email: { $regex: req.query.search, $options: 'i' } },
-                { service: { $regex: req.query.search, $options: 'i' } }
+            whereClause[Op.or] = [
+                { name: { [Op.like]: `%${req.query.search}%` } },
+                { email: { [Op.like]: `%${req.query.search}%` } },
+                { service: { [Op.like]: `%${req.query.search}%` } }
             ];
         }
 
-        const quotes = await Quote.find(filter)
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(limit);
+        const quotes = await Quote.findAndCountAll({
+            where: whereClause,
+            order: [['createdAt', 'DESC']],
+            limit: limit,
+            offset: skip
+        });
 
-        const total = await Quote.countDocuments(filter);
+        const total = quotes.count;
 
         res.json({
             success: true,
-            quotes,
+            quotes: quotes.rows,
             pagination: {
                 total,
                 page,
@@ -82,7 +83,7 @@ exports.getAllQuotes = async (req, res) => {
 // Get single quote by ID (Admin only)
 exports.getQuoteById = async (req, res) => {
     try {
-        const quote = await Quote.findById(req.params.id);
+        const quote = await Quote.findByPk(req.params.id);
 
         if (!quote) {
             return res.status(404).json({ success: false, message: 'Quote not found' });
@@ -109,15 +110,12 @@ exports.updateQuoteStatus = async (req, res) => {
             });
         }
 
-        const quote = await Quote.findByIdAndUpdate(
-            req.params.id,
-            { status },
-            { new: true, runValidators: true }
-        );
-
+        const quote = await Quote.findByPk(req.params.id);
         if (!quote) {
             return res.status(404).json({ success: false, message: 'Quote not found' });
         }
+
+        await quote.update({ status });
 
         res.json({ success: true, quote, message: 'Quote status updated successfully' });
     } catch (error) {
@@ -129,11 +127,12 @@ exports.updateQuoteStatus = async (req, res) => {
 // Delete quote (Admin only)
 exports.deleteQuote = async (req, res) => {
     try {
-        const quote = await Quote.findByIdAndDelete(req.params.id);
-
+        const quote = await Quote.findByPk(req.params.id);
         if (!quote) {
             return res.status(404).json({ success: false, message: 'Quote not found' });
         }
+
+        await quote.destroy();
 
         res.json({ success: true, message: 'Quote deleted successfully' });
     } catch (error) {

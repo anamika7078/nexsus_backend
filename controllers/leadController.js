@@ -1,4 +1,5 @@
 const Lead = require('../models/Lead');
+const { Op } = require('sequelize');
 
 // Get all leads
 exports.getAllLeads = async (req, res) => {
@@ -8,27 +9,29 @@ exports.getAllLeads = async (req, res) => {
         const skip = (page - 1) * limit;
 
         // Support filtering by status and search
-        const filter = {};
+        const whereClause = {};
         if (req.query.status) {
-            filter.status = req.query.status;
+            whereClause.status = req.query.status;
         }
         if (req.query.search) {
-            filter.$or = [
-                { name: { $regex: req.query.search, $options: 'i' } },
-                { email: { $regex: req.query.search, $options: 'i' } }
+            whereClause[Op.or] = [
+                { name: { [Op.like]: `%${req.query.search}%` } },
+                { email: { [Op.like]: `%${req.query.search}%` } }
             ];
         }
 
-        const leads = await Lead.find(filter)
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(limit);
+        const leads = await Lead.findAndCountAll({
+            where: whereClause,
+            order: [['createdAt', 'DESC']],
+            limit: limit,
+            offset: skip
+        });
 
-        const total = await Lead.countDocuments(filter);
+        const total = leads.count;
 
         res.json({
             success: true,
-            leads,
+            leads: leads.rows,
             pagination: {
                 total,
                 page,
@@ -44,7 +47,7 @@ exports.getAllLeads = async (req, res) => {
 // Get single lead by ID
 exports.getLeadById = async (req, res) => {
     try {
-        const lead = await Lead.findById(req.params.id);
+        const lead = await Lead.findByPk(req.params.id);
 
         if (!lead) {
             return res.status(404).json({ success: false, message: 'Lead not found' });
@@ -71,15 +74,12 @@ exports.updateLeadStatus = async (req, res) => {
             });
         }
 
-        const lead = await Lead.findByIdAndUpdate(
-            req.params.id,
-            { status },
-            { new: true, runValidators: true }
-        );
-
+        const lead = await Lead.findByPk(req.params.id);
         if (!lead) {
             return res.status(404).json({ success: false, message: 'Lead not found' });
         }
+
+        await lead.update({ status });
 
         res.json({ success: true, lead, message: 'Lead status updated successfully' });
     } catch (error) {
@@ -91,11 +91,12 @@ exports.updateLeadStatus = async (req, res) => {
 // Delete lead
 exports.deleteLead = async (req, res) => {
     try {
-        const lead = await Lead.findByIdAndDelete(req.params.id);
-
+        const lead = await Lead.findByPk(req.params.id);
         if (!lead) {
             return res.status(404).json({ success: false, message: 'Lead not found' });
         }
+
+        await lead.destroy();
 
         res.json({ success: true, message: 'Lead deleted successfully' });
     } catch (error) {
