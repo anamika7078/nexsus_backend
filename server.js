@@ -28,7 +28,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/faqs', faqRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/user', userRoutes);
-app.use('/api/quotes', quoteRoutes);
+app.use('/admin/quotes', quoteRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
 // Database Connection and Sync
