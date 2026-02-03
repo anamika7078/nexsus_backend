@@ -40,7 +40,7 @@ const queryBot = async (req, res) => {
         // Simple search (case insensitive)
         const faq = await FAQ.findOne({
             where: {
-                question: { [Op.like]: `%${message}%` }
+                question: { [Op.iLike]: `%${message}%` }
             }
         });
 

@@ -50,9 +50,9 @@ exports.getAllQuotes = async (req, res) => {
         }
         if (req.query.search) {
             whereClause[Op.or] = [
-                { name: { [Op.like]: `%${req.query.search}%` } },
-                { email: { [Op.like]: `%${req.query.search}%` } },
-                { service: { [Op.like]: `%${req.query.search}%` } }
+                { name: { [Op.iLike]: `%${req.query.search}%` } },
+                { email: { [Op.iLike]: `%${req.query.search}%` } },
+                { service: { [Op.iLike]: `%${req.query.search}%` } }
             ];
         }
 
