@@ -32,7 +32,7 @@ exports.createQuote = async (req, res) => {
         });
     } catch (error) {
         console.error('Error creating quote:', error);
-        res.status(500).json({ success: false, message: 'Failed to submit quote request' });
+        res.status(500).json({ success: false, message: 'Failed to submit quote request', error: error.message });
     }
 };
 

@@ -34,7 +34,7 @@ app.use('/api/dashboard', dashboardRoutes);
 // Database Connection and Sync
 sequelize.sync({ force: false })
     .then(() => {
-        console.log('✅ MySQL Database Connected & Synced');
+        console.log(`✅ ${sequelize.getDialect().toUpperCase()} Database Connected & Synced`);
         seedSuperAdmin();
     })
     .catch(err => console.error('❌ MySQL Connection Error:', err));
