@@ -12,7 +12,7 @@ const getEnv = (key, fallback) => process.env[key] || fallback;
 
 const signAccessToken = (user) => {
     return jwt.sign(
-        { id: user._id, role: user.role },
+        { id: user.id, role: user.role },
         requireEnv('JWT_SECRET'),
         { expiresIn: getEnv('JWT_EXPIRES_IN', '1d') }
     );
@@ -20,7 +20,7 @@ const signAccessToken = (user) => {
 
 const signRefreshToken = (user) => {
     return jwt.sign(
-        { id: user._id, type: 'refresh' },
+        { id: user.id, type: 'refresh' },
         requireEnv('JWT_REFRESH_SECRET'),
         { expiresIn: getEnv('JWT_REFRESH_EXPIRES_IN', '7d') }
     );
