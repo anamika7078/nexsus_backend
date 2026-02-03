@@ -37,7 +37,7 @@ sequelize.sync({ force: false })
         console.log(`✅ ${sequelize.getDialect().toUpperCase()} Database Connected & Synced`);
         seedSuperAdmin();
     })
-    .catch(err => console.error('❌ MySQL Connection Error:', err));
+    .catch(err => console.error('❌ Database Connection Error:', err));
 
 // Health Check
 app.get('/', (req, res) => {
