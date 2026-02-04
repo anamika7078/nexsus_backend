@@ -247,8 +247,12 @@ const socialLogin = async (req, res) => {
             user: { email: user.email, role: user.role, name: user.name, provider }
         });
     } catch (error) {
-        console.error('Social login error:', error);
-        res.status(500).json({ success: false, message: 'Social authentication failed' });
+        console.error('❌ Social login internal error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Social authentication failed',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     }
 };
 

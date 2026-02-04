@@ -41,13 +41,22 @@ sequelize.sync({ alter: true })
             await sequelize.query(`
                 DO $$ 
                 BEGIN 
-                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='Users' AND column_name='provider') THEN
-                        ALTER TABLE "Users" ADD COLUMN "provider" VARCHAR(255) DEFAULT 'local';
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE (table_name='Users' OR table_name='users') AND column_name='provider') THEN
+                        BEGIN
+                            ALTER TABLE "Users" ADD COLUMN "provider" VARCHAR(255) DEFAULT 'local';
+                        EXCEPTION WHEN others THEN
+                            BEGIN
+                                ALTER TABLE users ADD COLUMN provider VARCHAR(255) DEFAULT 'local';
+                            EXCEPTION WHEN others THEN
+                                RAISE NOTICE 'Could not add provider column automatically';
+                            END;
+                        END;
                     END IF;
                 END $$;
             `);
+            console.log('✅ Provider column check completed');
         } catch (colError) {
-            console.log('Note: Provider column check/addition skipped or completed.');
+            console.log('ℹ️ Provider column check info:', colError.message);
         }
 
         seedSuperAdmin();
