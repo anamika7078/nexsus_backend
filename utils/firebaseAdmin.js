@@ -16,13 +16,25 @@ if (absolutePath && fs.existsSync(absolutePath)) {
             admin.initializeApp({
                 credential: admin.credential.cert(serviceAccount)
             });
-            console.log('✅ Firebase Admin initialized successfully');
+            console.log('✅ Firebase Admin initialized successfully from file');
         }
     } catch (error) {
         console.error('❌ Error initializing Firebase Admin:', error.message);
     }
+} else if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    try {
+        if (!admin.apps.length) {
+            const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+            admin.initializeApp({
+                credential: admin.credential.cert(serviceAccount)
+            });
+            console.log('✅ Firebase Admin initialized from Environment Variable');
+        }
+    } catch (error) {
+        console.error('❌ Error initializing Firebase Admin from ENV:', error.message);
+    }
 } else {
-    console.warn('⚠️ FIREBASE_SERVICE_ACCOUNT_PATH is missing or file not found. Social login verification will fail.');
+    console.warn('⚠️ FIREBASE_SERVICE_ACCOUNT_PATH or JSON variable is missing. Social login verification will fail.');
 }
 
 const isFirebaseInitialized = () => admin.apps.length > 0;
