@@ -32,9 +32,24 @@ app.use('/admin/quotes', quoteRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
 // Database Connection and Sync
-sequelize.sync({ force: false })
-    .then(() => {
+sequelize.sync({ alter: true })
+    .then(async () => {
         console.log(`✅ ${sequelize.getDialect().toUpperCase()} Database Connected & Synced`);
+
+        // Manual check for provider column (backup for sync alter)
+        try {
+            await sequelize.query(`
+                DO $$ 
+                BEGIN 
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='Users' AND column_name='provider') THEN
+                        ALTER TABLE "Users" ADD COLUMN "provider" VARCHAR(255) DEFAULT 'local';
+                    END IF;
+                END $$;
+            `);
+        } catch (colError) {
+            console.log('Note: Provider column check/addition skipped or completed.');
+        }
+
         seedSuperAdmin();
     })
     .catch(err => console.error('❌ Database Connection Error:', err));

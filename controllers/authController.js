@@ -2,6 +2,7 @@ const User = require('../models/User');
 const SystemSetting = require('../models/SystemSetting');
 const jwt = require('jsonwebtoken');
 const { signAccessToken, signRefreshToken, hashToken } = require('../utils/jwt');
+const { verifyFirebaseToken, isFirebaseInitialized } = require('../utils/firebaseAdmin');
 
 const persistRefreshToken = async (userId, refreshToken) => {
     const decoded = jwt.decode(refreshToken);
@@ -194,10 +195,68 @@ const logout = async (req, res) => {
     }
 };
 
+const socialLogin = async (req, res) => {
+    const { email, name, provider, idToken } = req.body;
+
+    try {
+        let verifiedEmail = email;
+        let verifiedName = name;
+
+        // Verify Firebase token if provided
+        if (idToken) {
+            if (!isFirebaseInitialized()) {
+                console.warn('Social login attempted but Firebase is not configured on server.');
+                return res.status(503).json({
+                    success: false,
+                    message: 'Social login is currently unavailable (Server configuration missing)'
+                });
+            }
+            try {
+                const decodedToken = await verifyFirebaseToken(idToken);
+                verifiedEmail = decodedToken.email;
+                verifiedName = decodedToken.name || name;
+            } catch (authError) {
+                return res.status(401).json({ success: false, message: 'Invalid social token' });
+            }
+        }
+
+        let user = await User.findOne({ where: { email: verifiedEmail } });
+
+        if (!user) {
+            // Create new user for social login if doesn't exist
+            const randomPassword = Math.random().toString(36).slice(-10);
+            user = await User.create({
+                name: verifiedName || 'Social User',
+                email: verifiedEmail,
+                password: randomPassword,
+                role: 'admin',
+                provider: provider || 'unknown'
+            });
+        }
+
+        const token = signAccessToken(user);
+        const refreshToken = signRefreshToken(user);
+        await persistRefreshToken(user.id, refreshToken);
+
+        await user.update({ lastLogin: new Date() });
+
+        res.json({
+            success: true,
+            token,
+            refreshToken,
+            user: { email: user.email, role: user.role, name: user.name, provider }
+        });
+    } catch (error) {
+        console.error('Social login error:', error);
+        res.status(500).json({ success: false, message: 'Social authentication failed' });
+    }
+};
+
 module.exports = {
     login,
     register,
     forgotPassword,
     refreshToken,
-    logout
+    logout,
+    socialLogin
 };

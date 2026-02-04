@@ -28,6 +28,10 @@ const User = sequelize.define('User', {
         type: DataTypes.STRING,
         defaultValue: ''
     },
+    provider: {
+        type: DataTypes.STRING,
+        defaultValue: 'local'
+    },
     phone: {
         type: DataTypes.STRING,
         defaultValue: ''

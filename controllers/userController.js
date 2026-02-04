@@ -1,11 +1,14 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const SystemSetting = require('../models/SystemSetting');
+const { Op } = require('sequelize');
 
 // Get user profile
 exports.getProfile = async (req, res) => {
     try {
-        const user = await User.findById(req.user.id).select('-password');
+        const user = await User.findByPk(req.user.id, {
+            attributes: { exclude: ['password'] }
+        });
 
         if (!user) {
             return res.status(404).json({ success: false, message: 'User not found' });
@@ -29,18 +32,25 @@ exports.updateProfile = async (req, res) => {
         if (companyName !== undefined) updateData.companyName = companyName;
         if (email !== undefined) {
             // Check if email is already taken by another user
-            const existingUser = await User.findOne({ email, _id: { $ne: req.user.id } });
+            const existingUser = await User.findOne({
+                where: {
+                    email,
+                    id: { [Op.ne]: req.user.id }
+                }
+            });
             if (existingUser) {
                 return res.status(400).json({ success: false, message: 'Email already in use' });
             }
             updateData.email = email;
         }
 
-        const user = await User.findByIdAndUpdate(
-            req.user.id,
-            updateData,
-            { new: true, runValidators: true }
-        ).select('-password');
+        await User.update(updateData, {
+            where: { id: req.user.id }
+        });
+
+        const user = await User.findByPk(req.user.id, {
+            attributes: { exclude: ['password'] }
+        });
 
         if (!user) {
             return res.status(404).json({ success: false, message: 'User not found' });
@@ -72,7 +82,7 @@ exports.changePassword = async (req, res) => {
             });
         }
 
-        const user = await User.findById(req.user.id);
+        const user = await User.findByPk(req.user.id);
         if (!user) {
             return res.status(404).json({ success: false, message: 'User not found' });
         }
@@ -86,9 +96,8 @@ exports.changePassword = async (req, res) => {
             });
         }
 
-        // Hash new password
-        const salt = await bcrypt.genSalt(10);
-        user.password = await bcrypt.hash(newPassword, salt);
+        // Update password - the hook in the model will handle hashing
+        user.password = newPassword;
         await user.save();
 
         res.json({ success: true, message: 'Password changed successfully' });
@@ -108,11 +117,13 @@ exports.updateNotificationSettings = async (req, res) => {
         if (weeklySummary !== undefined) updateData.emailNotifications.weeklySummary = weeklySummary;
         if (systemUpdates !== undefined) updateData.emailNotifications.systemUpdates = systemUpdates;
 
-        const user = await User.findByIdAndUpdate(
-            req.user.id,
-            updateData,
-            { new: true, runValidators: true }
-        ).select('-password');
+        await User.update(updateData, {
+            where: { id: req.user.id }
+        });
+
+        const user = await User.findByPk(req.user.id, {
+            attributes: { exclude: ['password'] }
+        });
 
         if (!user) {
             return res.status(404).json({ success: false, message: 'User not found' });
@@ -132,17 +143,17 @@ exports.updateNotificationSettings = async (req, res) => {
 // Get registration secret
 exports.getRegistrationSecret = async (req, res) => {
     try {
-        let secretSetting = await SystemSetting.findOne({ key: 'registration_secret' });
+        let secretSetting = await SystemSetting.findOne({ where: { key: 'registration_secret' } });
         if (!secretSetting) {
-            secretSetting = new SystemSetting({
+            secretSetting = await SystemSetting.create({
                 key: 'registration_secret',
                 value: '12345',
                 description: 'Master key for new admin registrations'
             });
-            await secretSetting.save();
         }
         res.json({ success: true, secretKey: secretSetting.value });
     } catch (error) {
+        console.error('Error fetching secret:', error);
         res.status(500).json({ success: false, message: 'Failed to fetch registration secret' });
     }
 };
@@ -151,7 +162,7 @@ exports.getRegistrationSecret = async (req, res) => {
 exports.updateRegistrationSecret = async (req, res) => {
     try {
         // Only the master admin can update system security settings
-        const user = await User.findById(req.user.id);
+        const user = await User.findByPk(req.user.id);
         if (!user || user.email !== 'admin@gmail.com') {
             return res.status(403).json({
                 success: false,
@@ -164,21 +175,20 @@ exports.updateRegistrationSecret = async (req, res) => {
             return res.status(400).json({ success: false, message: 'New secret is required' });
         }
 
-        let secretSetting = await SystemSetting.findOne({ key: 'registration_secret' });
+        let secretSetting = await SystemSetting.findOne({ where: { key: 'registration_secret' } });
         if (secretSetting) {
             secretSetting.value = newSecret;
-            secretSetting.updatedAt = Date.now();
             await secretSetting.save();
         } else {
-            secretSetting = new SystemSetting({
+            await SystemSetting.create({
                 key: 'registration_secret',
                 value: newSecret
             });
-            await secretSetting.save();
         }
 
         res.json({ success: true, message: 'Registration master key updated successfully' });
     } catch (error) {
+        console.error('Error updating secret:', error);
         res.status(500).json({ success: false, message: 'Failed to update registration secret' });
     }
 };
