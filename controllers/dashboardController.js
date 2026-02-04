@@ -1,40 +1,69 @@
 const Lead = require('../models/Lead');
 const Quote = require('../models/Quote');
+const { Op } = require('sequelize');
+const sequelize = require('../config/database');
 
 // Get dashboard statistics
 exports.getDashboardStats = async (req, res) => {
     try {
         // Get total counts
-        const totalLeads = await Lead.countDocuments();
-        const totalQuotes = await Quote.countDocuments();
+        const totalLeads = await Lead.count();
+        const totalQuotes = await Quote.count();
 
         // Get status breakdowns
-        const leadsByStatus = await Lead.aggregate([
-            { $group: { _id: '$status', count: { $sum: 1 } } }
-        ]);
+        // Sequelize returns plain objects by default or standard instances. 
+        // We use raw: true to get simple objects.
+        const leadsByStatus = await Lead.findAll({
+            attributes: [
+                ['status', '_id'],
+                [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+            ],
+            group: ['status'],
+            raw: true
+        });
 
-        const quotesByStatus = await Quote.aggregate([
-            { $group: { _id: '$status', count: { $sum: 1 } } }
-        ]);
+        const quotesByStatus = await Quote.findAll({
+            attributes: [
+                ['status', '_id'],
+                [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+            ],
+            group: ['status'],
+            raw: true
+        });
 
         // Get recent leads (last 5)
-        const recentLeads = await Lead.find()
-            .sort({ createdAt: -1 })
-            .limit(5)
-            .select('name email type status createdAt');
+        const recentLeads = await Lead.findAll({
+            limit: 5,
+            order: [['createdAt', 'DESC']],
+            attributes: ['id', 'name', 'email', 'type', 'status', 'createdAt']
+        });
 
         // Get recent quotes (last 5)
-        const recentQuotes = await Quote.find()
-            .sort({ createdAt: -1 })
-            .limit(5)
-            .select('name email service status createdAt');
+        const recentQuotes = await Quote.findAll({
+            limit: 5,
+            order: [['createdAt', 'DESC']],
+            attributes: ['id', 'name', 'email', 'service', 'status', 'createdAt']
+        });
 
         // Calculate counts for this week
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-        const leadsThisWeek = await Lead.countDocuments({ createdAt: { $gte: oneWeekAgo } });
-        const quotesThisWeek = await Quote.countDocuments({ createdAt: { $gte: oneWeekAgo } });
+        const leadsThisWeek = await Lead.count({
+            where: {
+                createdAt: {
+                    [Op.gte]: oneWeekAgo
+                }
+            }
+        });
+
+        const quotesThisWeek = await Quote.count({
+            where: {
+                createdAt: {
+                    [Op.gte]: oneWeekAgo
+                }
+            }
+        });
 
         res.json({
             success: true,
@@ -54,6 +83,7 @@ exports.getDashboardStats = async (req, res) => {
         res.status(500).json({ success: false, message: 'Failed to fetch dashboard statistics' });
     }
 };
+
 // Get advanced analytics data
 exports.getAdvancedAnalytics = async (req, res) => {
     try {
@@ -62,40 +92,72 @@ exports.getAdvancedAnalytics = async (req, res) => {
         startDate.setDate(startDate.getDate() - days);
 
         // Daily leads
-        const dailyLeads = await Lead.aggregate([
-            { $match: { createdAt: { $gte: startDate } } },
-            {
-                $group: {
-                    _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-                    count: { $sum: 1 }
+        // Note: TO_CHAR is PostgreSQL specific. If using MySQL use DATE_FORMAT(createdAt, '%Y-%m-%d')
+        const dailyLeads = await Lead.findAll({
+            attributes: [
+                [sequelize.fn('TO_CHAR', sequelize.col('createdAt'), 'YYYY-MM-DD'), '_id'],
+                [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+            ],
+            where: {
+                createdAt: {
+                    [Op.gte]: startDate
                 }
             },
-            { $sort: { _id: 1 } }
-        ]);
+            group: [sequelize.fn('TO_CHAR', sequelize.col('createdAt'), 'YYYY-MM-DD')],
+            order: [[sequelize.fn('TO_CHAR', sequelize.col('createdAt'), 'YYYY-MM-DD'), 'ASC']],
+            raw: true
+        });
 
         // Daily quotes
-        const dailyQuotes = await Quote.aggregate([
-            { $match: { createdAt: { $gte: startDate } } },
-            {
-                $group: {
-                    _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-                    count: { $sum: 1 }
+        const dailyQuotes = await Quote.findAll({
+            attributes: [
+                [sequelize.fn('TO_CHAR', sequelize.col('createdAt'), 'YYYY-MM-DD'), '_id'],
+                [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+            ],
+            where: {
+                createdAt: {
+                    [Op.gte]: startDate
                 }
             },
-            { $sort: { _id: 1 } }
-        ]);
+            group: [sequelize.fn('TO_CHAR', sequelize.col('createdAt'), 'YYYY-MM-DD')],
+            order: [[sequelize.fn('TO_CHAR', sequelize.col('createdAt'), 'YYYY-MM-DD'), 'ASC']],
+            raw: true
+        });
 
         // Service distribution
-        const serviceDistribution = await Quote.aggregate([
-            { $match: { createdAt: { $gte: startDate } } },
-            { $group: { _id: '$service', count: { $sum: 1 } } },
-            { $sort: { count: -1 } },
-            { $limit: 8 }
-        ]);
+        const serviceDistribution = await Quote.findAll({
+            attributes: [
+                ['service', '_id'],
+                [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+            ],
+            where: {
+                createdAt: {
+                    [Op.gte]: startDate
+                }
+            },
+            group: ['service'],
+            order: [[sequelize.literal('count'), 'DESC']],
+            limit: 8,
+            raw: true
+        });
 
         // Conversion trends
-        const conversions = await Lead.countDocuments({ status: 'Closed', createdAt: { $gte: startDate } });
-        const totalLeads = await Lead.countDocuments({ createdAt: { $gte: startDate } });
+        const conversions = await Lead.count({
+            where: {
+                status: 'Closed',
+                createdAt: {
+                    [Op.gte]: startDate
+                }
+            }
+        });
+
+        const totalLeads = await Lead.count({
+            where: {
+                createdAt: {
+                    [Op.gte]: startDate
+                }
+            }
+        });
 
         res.json({
             success: true,
