@@ -10,7 +10,10 @@ const leadRoutes = require('./routes/leadRoutes');
 const userRoutes = require('./routes/userRoutes');
 const quoteRoutes = require('./routes/quoteRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
+const blogRoutes = require('./routes/blogRoutes');
+const uploadRoutes = require('./routes/uploadRoutes');
 const seedSuperAdmin = require('./utils/seeder');
+const seedBlogs = require('./utils/blogSeeder');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -21,8 +24,14 @@ const corsOrigins = process.env.CORS_ORIGIN
     : '*';
 app.use(cors({ origin: corsOrigins }));
 app.use(express.json());
+app.use(require('express-fileupload')());
+
+// Static files
+app.use('/uploads', express.static('uploads'));
 
 // Routes
+app.use('/api', blogRoutes);
+app.use('/api', uploadRoutes);
 app.use('/api', contactRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/faqs', faqRoutes);
@@ -60,6 +69,7 @@ sequelize.sync({ alter: true })
         }
 
         seedSuperAdmin();
+        seedBlogs();
     })
     .catch(err => console.error('❌ Database Connection Error:', err));
 
